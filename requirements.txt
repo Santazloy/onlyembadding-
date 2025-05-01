@@ -1,0 +1,4 @@
+aiogram~=3.17.0
+openai
+asyncpg
+python-dotenv
