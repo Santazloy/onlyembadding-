@@ -1,10 +1,8 @@
 # main.py
-import uvicorn
 import asyncio
 import logging
 import os
 
-from fastapi import FastAPI
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,15 +15,9 @@ from daily_report import send_reports_for_all_groups
 from mamasan import send_random_questions
 
 logging.basicConfig(level=logging.INFO)
-app = FastAPI()
 
 
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "Bot is running"}
-
-
-async def on_startup():
+async def main():
     # Инициализируем БД
     await init_db()
 
@@ -36,10 +28,6 @@ async def on_startup():
     # Подключаем роутер aiogram
     dp = Dispatcher()
     dp.include_router(router)
-
-    # Запускаем бота (polling)
-    asyncio.create_task(dp.start_polling(bot, skip_updates=True))
-    logging.info("Бот запущен. Начался polling...")
 
     # Создаём планировщик
     scheduler = AsyncIOScheduler(timezone=pytz.timezone("Asia/Shanghai"))
@@ -58,12 +46,13 @@ async def on_startup():
 
     scheduler.start()
 
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(on_startup())
+    logging.info("Бот запущен. Начинается polling...")
+    # Запускаем бота и не выходим, пока бот работает
+    await dp.start_polling(bot, skip_updates=True)
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("Бот остановлен")
