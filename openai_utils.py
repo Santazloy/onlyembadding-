@@ -1,55 +1,62 @@
+# openai_utils.py
 import openai
 import asyncio
 
 from config import OPENAI_API_KEY
 
-# Инициализация ключа OpenAI
+# Инициализируем ключ
 openai.api_key = OPENAI_API_KEY
+
 
 async def get_embedding(text: str) -> list[float]:
     """
-    Возвращает векторное представление текста с использованием модели text-embedding-3-large.
+    Возвращает векторное представление текста с помощью text-embedding-3-large.
     """
     loop = asyncio.get_event_loop()
     try:
-        response = await loop.run_in_executor(
+        resp = await loop.run_in_executor(
             None,
             lambda: openai.embeddings.create(
                 model="text-embedding-3-large",
                 input=text
             )
         )
-        return response["data"][0]["embedding"]
+        # Теперь resp — объект CreateEmbeddingResponse, у него есть атрибут .data
+        return resp.data[0].embedding
     except Exception as e:
         print(f"[OpenAI] Ошибка при получении эмбеддинга: {e}")
         return []
 
+
 async def transcribe_audio(file_path: str) -> str:
     """
-    Транскрибирует аудио-файл через модель whisper-1.
+    Транскрибирует аудио через Whisper.
     """
     loop = asyncio.get_event_loop()
     try:
-        with open(file_path, "rb") as audio_file:
-            response = await loop.run_in_executor(
+        with open(file_path, "rb") as f:
+            resp = await loop.run_in_executor(
                 None,
                 lambda: openai.audio.transcriptions.create(
                     model="whisper-1",
-                    file=audio_file
+                    file=f
                 )
             )
-        return response["text"]
+        return resp.text
     except Exception as e:
         print(f"[OpenAI] Ошибка при расшифровке аудио: {e}")
         return ""
 
-async def generate_text(prompt: str, model: str = "gpt-4o", max_tokens: int = 2000) -> str:
+
+async def generate_text(prompt: str,
+                        model: str = "gpt-4o",
+                        max_tokens: int = 2000) -> str:
     """
-    Генерация текста через GPT-4o.
+    Простая генерация текста через Chat Completions.
     """
     loop = asyncio.get_event_loop()
     try:
-        response = await loop.run_in_executor(
+        resp = await loop.run_in_executor(
             None,
             lambda: openai.chat.completions.create(
                 model=model,
@@ -59,18 +66,20 @@ async def generate_text(prompt: str, model: str = "gpt-4o", max_tokens: int = 20
                 top_p=1.0
             )
         )
-        return response.choices[0].message.content.strip()
+        return resp.choices[0].message.content.strip()
     except Exception as e:
         print(f"[OpenAI] Ошибка при генерации текста: {e}")
         return "Ошибка при генерации ответа."
 
-async def generate_analysis_text(prompt: str, model: str = "gpt-4o") -> str:
+
+async def generate_analysis_text(prompt: str,
+                                 model: str = "gpt-4o") -> str:
     """
-    Генерация развёрнутого анализа (daily_report) через GPT-4o.
+    Генерация развёрнутого анализа (для daily_report).
     """
     loop = asyncio.get_event_loop()
     try:
-        response = await loop.run_in_executor(
+        resp = await loop.run_in_executor(
             None,
             lambda: openai.chat.completions.create(
                 model=model,
@@ -79,7 +88,7 @@ async def generate_analysis_text(prompt: str, model: str = "gpt-4o") -> str:
                 temperature=0.7
             )
         )
-        return response.choices[0].message.content.strip()
+        return resp.choices[0].message.content.strip()
     except Exception as e:
         print(f"[OpenAI] Ошибка при генерации анализа: {e}")
         return ""
