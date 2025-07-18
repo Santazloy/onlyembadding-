@@ -26,17 +26,16 @@ env/
 ENV/
 env.bak/
 venv.bak/
+
+# Environment files
 .env
-venv
-.venv
-# PyCharm
+
+# IDEs and editors
 .idea/
+.vscode/
 
 # macOS
 .DS_Store
-
-# VS Code
-.vscode/
 
 # Logs and databases
 *.log
@@ -46,6 +45,7 @@ venv
 *.tmp
 *.bak
 *~
+*.swp
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -69,5 +69,7 @@ coverage.xml
 .mypy_cache/
 .dmypy.json
 
-# Other
-*.swp
+# Audio TTS temp files
+raw.opus
+temp_voice.ogg
+speech.ogg
