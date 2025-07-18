@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -15,7 +14,6 @@ from mamasan import send_random_questions
 
 logging.basicConfig(level=logging.INFO)
 
-
 async def main():
     # Инициализируем БД
     await init_db()
@@ -28,35 +26,18 @@ async def main():
     dp = Dispatcher()
     dp.include_router(router)
 
-    # Создаём планировщик
+    # Настраиваем планировщик
     scheduler = AsyncIOScheduler(timezone=pytz.timezone("Asia/Shanghai"))
-    # Ежедневный отчёт /report
-    scheduler.add_job(
-        send_reports_for_all_groups,
-        'cron',
-        hour=0,
-        minute=0,
-        args=[bot]
-    )
-    # Рассылка случайных вопросов (в 12:00)
-    scheduler.add_job(
-        send_random_questions,
-        'cron',
-        hour=12,
-        minute=0,
-        args=[bot]
-    )
-
+    scheduler.add_job(send_reports_for_all_groups, 'cron', hour=0, minute=0, args=[bot])
+    scheduler.add_job(send_random_questions,    'cron', hour=12, minute=0, args=[bot])
     scheduler.start()
 
-    # Удаляем любой установленный webhook, чтобы не было конфликта getUpdates
+    # Удаляем webhook, чтобы можно было использовать polling
     await bot.delete_webhook(drop_pending_updates=True)
-    # Небольшая пауза, чтобы команда успела отработать на сервере
     await asyncio.sleep(1)
 
     logging.info("Бот запущен. Начинается polling...")
     await dp.start_polling(bot, skip_updates=True)
-
 
 if __name__ == "__main__":
     try:
