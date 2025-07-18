@@ -1,4 +1,24 @@
+# Telegram + polling
 aiogram~=3.17.0
-openai
-asyncpg
-python-dotenv
+
+# OpenAI (Chat, Embeddings, TTS)
+openai>=1.97.0
+
+# PostgreSQL async
+asyncpg>=0.30.0
+
+# Планировщик задач в asyncio
+APScheduler>=3.10.0
+
+# Загрузка .env-файла
+python-dotenv>=1.1.1
+
+# Работа с часовыми поясами
+pytz>=2025.2
+
+# HTTP-клиент для запросов к TTS и биржам
+requests>=2.31.0
+
+# Библиотеки, требуемые aiogram
+aiohttp>=3.11.18
+aiofiles>=24.1.0
