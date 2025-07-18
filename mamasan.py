@@ -1,4 +1,5 @@
 # mamasan.py
+
 import os
 import asyncio
 import logging
@@ -14,13 +15,13 @@ from config import GROUP_IDS
 
 logger = logging.getLogger(__name__)
 
-# Тригер-слова
+# Триггер-слова
 VOICE_TRIGGERS_EN = ["lady", "lady san"]
-TEXT_TRIGGERS_EN = ["miss", "miss san"]
+TEXT_TRIGGERS_EN  = ["miss", "miss san"]
 VOICE_TRIGGERS_RU = ["леди", "леди сан"]
-TEXT_TRIGGERS_RU = ["мисс", "мисс сан"]
+TEXT_TRIGGERS_RU  = ["мисс", "мисс сан"]
 
-# Ваш пул вопросов…
+# Пул вопросов
 QUESTIONS_POOL = [
     "Как правильно организовать встречу с VIP-клиентом в нашем агентстве?",
     "Какие требования нужно соблюсти при подготовке к встрече с высокопоставленным клиентом?",
@@ -47,11 +48,11 @@ QUESTIONS_POOL = [
     "Какие заведения в Шанхае считаются элитными для бизнес-клиентов?",
     "Какие бары с высокой репутацией ты рекомендуешь для встреч с клиентами?",
     "Как быстро разобраться с приобретением SIM-карты в Китае?",
-    "Какие шаги нужно предпринять для открытия банковского счета в Шанхае?",
+    "Какие шаги нужно предпринять для открытия банковского счёта в Шанхае?",
     "Какие советы помогут освоиться с местной транспортной системой?",
     "Какие документы требуются для оформления SIM-карты в Шанхае?",
-    "Как адаптироваться к работе с местными банками и платежными системами?",
-    "Что делать, если клиент требует дополнительных услуг, не оговоренных заранее?",
+    "Как адаптироваться к работе с местными банками и платёжными системами?",
+    "Что делать, если клиент требует дополнительных услуг, не оговорённых заранее?",
     "Как вежливо и строго отказать клиенту от дополнительных требований?",
     "Что сказать клиенту, если его требования выходят за рамки первоначального соглашения?",
     "Какие фразы помогут сохранить профессионализм в конфликтной ситуации с клиентом?",
@@ -91,7 +92,7 @@ QUESTIONS_POOL = [
     "Можешь предложить пример сбалансированного меню на неделю для девушки с ненормированным графиком?",
     "Какие блюда помогут поддерживать энергию в течение напряжённого дня?",
     "Как составить рацион при нестабильном рабочем графике?",
-    "Какие легкие и питательные блюда можно приготовить в условиях Шанхая?",
+    "Какие лёгкие и питательные блюда можно приготовить в условиях Шанхая?",
     "Какие рекомендации по диете дашь для поддержания баланса питания при работе в эскорте?",
     "Какие советы помогут выглядеть уверенно и натурально на публике?",
     "Как справляться с эмоциями при встрече с требовательным клиентом?",
@@ -125,6 +126,7 @@ QUESTIONS_POOL = [
     "Какие методы самомотивации наиболее эффективны при стрессовых периодах?"
 ]
 
+
 def detect_language_of_trigger(text: str) -> str:
     txt_lower = text.lower()
     if any(t in txt_lower for t in VOICE_TRIGGERS_EN + TEXT_TRIGGERS_EN):
@@ -132,6 +134,7 @@ def detect_language_of_trigger(text: str) -> str:
     if any(t in txt_lower for t in VOICE_TRIGGERS_RU + TEXT_TRIGGERS_RU):
         return "ru"
     return ""
+
 
 async def generate_gpt_reply(text: str, lang: str) -> str:
     """
@@ -155,7 +158,7 @@ async def generate_gpt_reply(text: str, lang: str) -> str:
         resp = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: openai.chat.completions.create(
-                model="gpt-3.5-turbo",  # или любая другая модель
+                model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": text}
@@ -168,10 +171,14 @@ async def generate_gpt_reply(text: str, lang: str) -> str:
         logger.error(f"GPT error: {e}")
         return "Извини, GPT недоступен."
 
+
 async def send_voice_reply(message: types.Message, text: str, lang: str):
-    TTS_API_KEY = os.getenv("TTS_API_KEY", "")
+    """
+    Генерация голосового сообщения через внешний TTS.
+    """
+    TTS_API_KEY      = os.getenv("TTS_API_KEY", "")
     TTS_API_ENDPOINT = os.getenv("TTS_API_ENDPOINT", "")
-    FFMPEG_CMD = os.getenv("FFMPEG_PATH", "ffmpeg")
+    FFMPEG_CMD       = os.getenv("FFMPEG_PATH", "ffmpeg")
 
     if not TTS_API_KEY or not TTS_API_ENDPOINT:
         await message.answer(f"[Голосовой ответ не настроен]\n{text}")
@@ -215,6 +222,7 @@ async def send_voice_reply(message: types.Message, text: str, lang: str):
         logger.error(f"TTS error: {e}")
         await message.answer(f"Ошибка TTS: {e}\n{text}")
 
+
 async def send_random_questions(bot: Bot):
     """
     Рассылает несколько случайных вопросов.
@@ -222,8 +230,10 @@ async def send_random_questions(bot: Bot):
     qs = random.sample(QUESTIONS_POOL, min(5, len(QUESTIONS_POOL)))
     greet = (
         "<b>Привет, я Леди Сан!</b>\n"
-        "Триггеры для голосового ответа: 'lady', 'lady san' (англ), 'леди', 'леди сан' (рус).\n"
-        "Триггеры для текстового ответа: 'miss', 'miss san' (англ), 'мисс', 'мисс сан' (рус).\n\n"
+        "Триггеры для голосового ответа: 'lady', 'lady san' (англ), "
+        "'леди', 'леди сан' (рус).\n"
+        "Триггеры для текстового ответа: 'miss', 'miss san' (англ), "
+        "'мисс', 'мисс сан' (рус).\n\n"
         "Попробуй, дорогая!\n\n"
         "<b>Пример вопросов:</b>"
     )
