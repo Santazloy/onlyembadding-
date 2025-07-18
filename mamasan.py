@@ -14,14 +14,13 @@ from config import GROUP_IDS
 
 logger = logging.getLogger(__name__)
 
-# Английские триггеры для голос/текст
+# Тригер-слова
 VOICE_TRIGGERS_EN = ["lady", "lady san"]
 TEXT_TRIGGERS_EN = ["miss", "miss san"]
-
-# Русские триггеры для голос/текст
 VOICE_TRIGGERS_RU = ["леди", "леди сан"]
 TEXT_TRIGGERS_RU = ["мисс", "мисс сан"]
 
+# Ваш пул вопросов…
 QUESTIONS_POOL = [
     "Как правильно организовать встречу с VIP-клиентом в нашем агентстве?",
     "Какие требования нужно соблюсти при подготовке к встрече с высокопоставленным клиентом?",
@@ -126,12 +125,7 @@ QUESTIONS_POOL = [
     "Какие методы самомотивации наиболее эффективны при стрессовых периодах?"
 ]
 
-
 def detect_language_of_trigger(text: str) -> str:
-    """
-    Возвращает 'en', если в тексте встретился английский триггер,
-    'ru', если русский, иначе ''.
-    """
     txt_lower = text.lower()
     if any(t in txt_lower for t in VOICE_TRIGGERS_EN + TEXT_TRIGGERS_EN):
         return "en"
@@ -139,12 +133,9 @@ def detect_language_of_trigger(text: str) -> str:
         return "ru"
     return ""
 
-
 async def generate_gpt_reply(text: str, lang: str) -> str:
     """
-    Генерируем ответ GPT. 
-    Если lang=='en', добавляем "Please reply in English."
-    Иначе "Отвечай на русском языке."
+    Генерация ответа от «Мама сан».
     """
     system_prompt = (
         "Ты — Мама сан из эскорт-агентства YCF в Шанхае с 9-летним стажем. "
@@ -153,7 +144,8 @@ async def generate_gpt_reply(text: str, lang: str) -> str:
         "Все твои ответы обращены к девушкам. "
         "Отвечай исключительно на поставленные вопросы. "
         "В команде есть персонажи: панда-егор, гепард-лео, медведь-михаил, белка-крис, "
-        "если тебя о них спросят — расскажи весёлые истории.")
+        "если тебя о них спросят — расскажи весёлые истории."
+    )
     if lang == "en":
         system_prompt += " Please reply in English."
     else:
@@ -162,30 +154,21 @@ async def generate_gpt_reply(text: str, lang: str) -> str:
     try:
         resp = await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",  # Или gpt-4
+            lambda: openai.chat.completions.create(
+                model="gpt-3.5-turbo",  # или любая другая модель
                 messages=[
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-                    {
-                        "role": "user",
-                        "content": text
-                    },
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": text}
                 ],
-                temperature=0.7))
+                temperature=0.7
+            )
+        )
         return resp.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"GPT error: {e}")
         return "Извини, GPT недоступен."
 
-
 async def send_voice_reply(message: types.Message, text: str, lang: str):
-    """
-    Генерация голосового сообщения. 
-    lang можно использовать, если TTS умеет выбирать язык.
-    """
     TTS_API_KEY = os.getenv("TTS_API_KEY", "")
     TTS_API_ENDPOINT = os.getenv("TTS_API_ENDPOINT", "")
     FFMPEG_CMD = os.getenv("FFMPEG_PATH", "ffmpeg")
@@ -201,39 +184,27 @@ async def send_voice_reply(message: types.Message, text: str, lang: str):
             "response_format": "opus",
             "model": "tts-1-hd"
         }
-        # Если ваш TTS поддерживает выбор языка:
-        #payload["lang"] = lang or "ru"
-
         headers = {
             "Authorization": f"Bearer {TTS_API_KEY}",
             "Content-Type": "application/json"
         }
         resp = requests.post(TTS_API_ENDPOINT, json=payload, headers=headers)
         if resp.status_code == 200:
-            # Записываем ответ
             with open("raw.opus", "wb") as f:
                 f.write(resp.content)
 
-            # ffmpeg-конверсия
             subprocess.run([
                 FFMPEG_CMD, "-y", "-i", "raw.opus", "-c:a", "libopus", "-ar",
                 "48000", "-ac", "1", "-b:a", "64k", "-map_metadata", "-1",
                 "-f", "ogg", "speech.ogg"
-            ],
-                           check=True)
+            ], check=True)
 
             bot = message.bot
-            # Отправляем ChatAction
-            await bot.send_chat_action(message.chat.id,
-                                       ChatAction.UPLOAD_VOICE)
-
+            await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VOICE)
             voice_file = FSInputFile("speech.ogg")
             await message.answer_voice(voice_file)
-
         else:
-            await message.answer(
-                f"Ошибка TTS ({resp.status_code}): {resp.text}\n{text}")
-
+            await message.answer(f"Ошибка TTS ({resp.status_code}): {resp.text}\n{text}")
     except subprocess.CalledProcessError as e:
         logger.error(f"FFmpeg error: {e}")
         await message.answer(f"Ошибка ffmpeg: {e}\n{text}")
@@ -244,23 +215,20 @@ async def send_voice_reply(message: types.Message, text: str, lang: str):
         logger.error(f"TTS error: {e}")
         await message.answer(f"Ошибка TTS: {e}\n{text}")
 
-
 async def send_random_questions(bot: Bot):
     """
-    Рассылает ~5 случайных вопросов. 
+    Рассылает несколько случайных вопросов.
     """
-    sample_size = 5
-    qs = random.sample(QUESTIONS_POOL, min(sample_size, len(QUESTIONS_POOL)))
-
+    qs = random.sample(QUESTIONS_POOL, min(5, len(QUESTIONS_POOL)))
     greet = (
         "<b>Привет, я Леди Сан!</b>\n"
         "Триггеры для голосового ответа: 'lady', 'lady san' (англ), 'леди', 'леди сан' (рус).\n"
         "Триггеры для текстового ответа: 'miss', 'miss san' (англ), 'мисс', 'мисс сан' (рус).\n\n"
         "Попробуй, дорогая!\n\n"
-        "<b>Пример вопросов:</b>")
+        "<b>Пример вопросов:</b>"
+    )
     q_text = "\n".join(f"<pre>{q}</pre>" for q in qs)
     message = f"{greet}\n{q_text}\n"
-
     for chat_id in GROUP_IDS:
         try:
             await bot.send_message(chat_id, message, parse_mode="HTML")

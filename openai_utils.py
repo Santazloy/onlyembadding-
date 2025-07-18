@@ -1,4 +1,3 @@
-# openai_utils.py
 import openai
 import asyncio
 
@@ -6,7 +5,6 @@ from config import OPENAI_API_KEY
 
 # Инициализируем ключ
 openai.api_key = OPENAI_API_KEY
-
 
 async def get_embedding(text: str) -> list[float]:
     """
@@ -21,12 +19,11 @@ async def get_embedding(text: str) -> list[float]:
                 input=text
             )
         )
-        # Теперь resp — объект CreateEmbeddingResponse, у него есть атрибут .data
+        # resp.data — список, в нулевом элементе .embedding
         return resp.data[0].embedding
     except Exception as e:
         print(f"[OpenAI] Ошибка при получении эмбеддинга: {e}")
         return []
-
 
 async def transcribe_audio(file_path: str) -> str:
     """
@@ -46,7 +43,6 @@ async def transcribe_audio(file_path: str) -> str:
     except Exception as e:
         print(f"[OpenAI] Ошибка при расшифровке аудио: {e}")
         return ""
-
 
 async def generate_text(prompt: str,
                         model: str = "gpt-4o",
@@ -70,7 +66,6 @@ async def generate_text(prompt: str,
     except Exception as e:
         print(f"[OpenAI] Ошибка при генерации текста: {e}")
         return "Ошибка при генерации ответа."
-
 
 async def generate_analysis_text(prompt: str,
                                  model: str = "gpt-4o") -> str:
