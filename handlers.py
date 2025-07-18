@@ -1,3 +1,4 @@
+# handlers.py
 import os
 import logging
 from aiogram import Router, types, F
@@ -41,7 +42,7 @@ async def cmd_test(message: types.Message):
 @router.message(Command("report"))
 async def cmd_report(message: types.Message):
     """
-    Вызывает формирование и отправку отчёта (daily_report.py) 
+    Вызывает формирование и отправку отчёта (daily_report.py)
     для текущего чата.
     """
     bot = message.bot
@@ -52,7 +53,7 @@ async def cmd_report(message: types.Message):
 @router.message(Command("ex"))
 async def ex_command_handler(message: types.Message):
     """
-    Команда /ex <сумма> <валюта>, 
+    Команда /ex <сумма> <валюта>,
     например: /ex 100 USD
     Обращается к convert_and_format из exchange.py
     """
@@ -76,7 +77,7 @@ async def ex_command_handler(message: types.Message):
 @router.message(Command("taro"))
 async def cmd_taro(message: types.Message):
     """
-    Вытягиваем 3 карты из Таро Манары, 
+    Вытягиваем 3 карты из Таро Манары,
     отправляем фото + интерпретацию GPT.
     """
     try:

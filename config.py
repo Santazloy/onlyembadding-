@@ -1,27 +1,33 @@
-# config.py
 import os
 from dotenv import load_dotenv
 
+# Загружаем переменные окружения из .env
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Telegram Bot Token
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
-PGHOST = os.getenv("PGHOST", "")
-PGPORT = os.getenv("PGPORT", "")
-PGUSER = os.getenv("PGUSER", "")
-PGDATABASE = os.getenv("PGDATABASE", "")
-PGPASSWORD = os.getenv("PGPASSWORD", "")
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+# OpenAI API Key
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
-# Список ID админов, разделённый запятой
-ADMIN_IDS = os.getenv("ADMIN_IDS", "")
-if ADMIN_IDS:
-    ADMIN_IDS = [int(x.strip()) for x in ADMIN_IDS.split(",")]
+# PostgreSQL (Supabase) параметры (необязательно, если используете DATABASE_URL)
+PGHOST: str = os.getenv("PGHOST", "")
+PGPORT: str = os.getenv("PGPORT", "")
+PGUSER: str = os.getenv("PGUSER", "")
+PGDATABASE: str = os.getenv("PGDATABASE", "")
+PGPASSWORD: str = os.getenv("PGPASSWORD", "")
+
+# Полный URL к базе (с SSL, если нужно)
+DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+
+# Администраторы бота (по ID), передаются через ADMIN_IDS в .env
+_admin_ids_raw = os.getenv("ADMIN_IDS", "")
+if _admin_ids_raw:
+    ADMIN_IDS = [int(x.strip()) for x in _admin_ids_raw.split(",") if x.strip()]
 else:
     ADMIN_IDS = []
 
-# ID групп, в которых бот собирает эмбеддинги
+# Статический список ID групп, в которых бот собирает эмбеддинги и реагирует на команды
 GROUP_IDS = [
     -1002168406968,
     -1002433229203,
@@ -29,11 +35,11 @@ GROUP_IDS = [
     -1002315659294,
     -1002342166200,
     -1002250158149,
-    -1002468561827,   # группа с китайским агентом
-    -1002301241555    # рабочая группа команды
+    -1002468561827,  # группа с китайским агентом
+    -1002301241555   # рабочая группа команды
 ]
 
-# Доп. данные по участникам (если нужно, храните где-то ещё)
+# Дополнительные данные по участникам (если нужно)
 TEAM_MEMBERS = {
     7987253532: "Royal",
     7281089930: "MIsha",
