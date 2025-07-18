@@ -1,4 +1,3 @@
-# main.py
 import asyncio
 import logging
 import os
@@ -32,22 +31,30 @@ async def main():
     # Создаём планировщик
     scheduler = AsyncIOScheduler(timezone=pytz.timezone("Asia/Shanghai"))
     # Ежедневный отчёт /report
-    scheduler.add_job(send_reports_for_all_groups,
-                      'cron',
-                      hour=0,
-                      minute=0,
-                      args=[bot])
+    scheduler.add_job(
+        send_reports_for_all_groups,
+        'cron',
+        hour=0,
+        minute=0,
+        args=[bot]
+    )
     # Рассылка случайных вопросов (в 12:00)
-    scheduler.add_job(send_random_questions,
-                      'cron',
-                      hour=12,
-                      minute=0,
-                      args=[bot])
+    scheduler.add_job(
+        send_random_questions,
+        'cron',
+        hour=12,
+        minute=0,
+        args=[bot]
+    )
 
     scheduler.start()
 
+    # Удаляем любой установленный webhook, чтобы не было конфликта getUpdates
+    await bot.delete_webhook(drop_pending_updates=True)
+    # Небольшая пауза, чтобы команда успела отработать на сервере
+    await asyncio.sleep(1)
+
     logging.info("Бот запущен. Начинается polling...")
-    # Запускаем бота и не выходим, пока бот работает
     await dp.start_polling(bot, skip_updates=True)
 
 
