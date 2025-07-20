@@ -1,4 +1,5 @@
 import os
+import html
 import logging
 from aiogram import Router, types, F
 from aiogram.filters import Command
@@ -55,7 +56,6 @@ async def ex_command_handler(message: types.Message):
     result_text = convert_and_format(amount, base_currency)
     await message.answer(result_text, parse_mode="HTML")
 
-
 @router.message(Command("taro"))
 async def cmd_taro(message: types.Message):
     try:
@@ -70,8 +70,10 @@ async def cmd_taro(message: types.Message):
         caption = f"{pos_text}: {card_name}{orientation}"
         full_path = os.path.join(TARO_FOLDER, fname)
 
-        interpretation = get_card_interpretation(card_name, pos_text, is_rev)
+        # Асинхронно ждём интерпретацию
+        interpretation = await get_card_interpretation(card_name, pos_text, is_rev)
 
+        # Отправляем фото (без изменений)
         try:
             photo = FSInputFile(full_path)
             await message.answer_photo(photo=photo, caption=caption)
@@ -83,8 +85,9 @@ async def cmd_taro(message: types.Message):
             )
             continue
 
-        await message.answer(f"<pre>{interpretation}</pre>", parse_mode="HTML")
-
+        # Отправляем интерпретацию
+        await message.answer(f"<pre>{html.escape(interpretation)}</pre>",
+                             parse_mode="HTML")
 
 @router.message(Command("web"))
 async def cmd_web(message: types.Message):

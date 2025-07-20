@@ -1,8 +1,10 @@
 import os
 import random
-import openai
 import logging
 import html
+import asyncio
+
+from openai_utils import generate_text
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +12,7 @@ logger = logging.getLogger(__name__)
 TARO_FOLDER = os.path.join(os.path.dirname(__file__), "TARO")
 REVERSED_CHANCE = 0.2
 
-# Словарь карт Таро Манара (из вашего кода)
+# Словарь карт Таро Манара (старшие арканы)
 manara_cards = {
     "Шут.jpg": "Шут",
     "Маг.jpg": "Маг",
@@ -36,7 +38,8 @@ manara_cards = {
     "Мир.jpg": "Мир"
 }
 
-# Младшие арканы – каждая масть: Туз, 2..10, Слуга (Паж), Всадница (Рыцарь), Королева, Король.
+# Младшие арканы – масти Воды, Воздуха, Земли, Огня
+
 # Масть Воды
 manara_cards.update({
     "Туз_воды.jpg": "Туз Воды",
@@ -109,7 +112,6 @@ manara_cards.update({
     "Король_огня.jpg": "Король Огня"
 })
 
-
 def draw_cards(cards_dict, count=3, reversed_chance=REVERSED_CHANCE):
     """
     Случайно выбираем `count` карт из словаря cards_dict.
@@ -125,40 +127,30 @@ def draw_cards(cards_dict, count=3, reversed_chance=REVERSED_CHANCE):
         results.append((fname, card_name, is_rev))
     return results
 
-
-def get_card_interpretation(card_name: str, position: str,
-                            is_reversed: bool) -> str:
+async def get_card_interpretation(card_name: str,
+                                  position: str,
+                                  is_reversed: bool) -> str:
     """
-    Запрашивает ChatCompletion у OpenAI для интерпретации карты `card_name`.
-    position — "Прошлое", "Настоящее" или "Будущее".
-    is_reversed — перевёрнутая ли карта.
+    Асинхронно запрашивает у OpenAI интерпретацию карты.
     """
     orientation_text = "перевёрнутая" if is_reversed else "прямая"
-    prompt = (
-        f"Ты — знаток Таро Манара. Я вытащил карту '{card_name}' в позиции '{position}'. "
+    system_prompt = (
+        "Ты — знаток Таро Манара. Отвечай дружелюбно и информативно, без мистицизма."
+    )
+    full_prompt = (
+        f"{system_prompt}\n\n"
+        f"Я вытащил карту '{card_name}' в позиции '{position}'. "
         f"Она {orientation_text}. Объясни её значение в данном аспекте, "
-        "учитывая особенности колоды Манара. Ответь дружелюбно и информативно."
+        "учитывая особенности колоды Манара."
     )
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o",  # Или другой доступный
-            messages=[{
-                "role":
-                "system",
-                "content":
-                ("Ты выступаешь экспертом по Таро Манара. "
-                 "Отвечай развёрнуто, дружелюбно и информативно, без излишнего мистицизма."
-                 )
-            }, {
-                "role": "user",
-                "content": prompt
-            }],
-            temperature=0.7,
-            max_tokens=2000)
-        answer_text = response.choices[0].message.content.strip()
+        interpretation = await generate_text(
+            prompt=full_prompt,
+            model="gpt-4o",
+            max_tokens=2000
+        )
+        return interpretation.strip()
     except Exception as e:
-        logger.error(f"Ошибка при запросе к OpenAI: {e}")
-        answer_text = "Извините, произошла ошибка при получении интерпретации."
-
-    return answer_text
+        logger.error(f"Ошибка при получении интерпретации Таро: {e}")
+        return "Извините, произошла ошибка при получении интерпретации."
