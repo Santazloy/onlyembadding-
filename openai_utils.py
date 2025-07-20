@@ -1,8 +1,9 @@
+# openai_utils.py
+
 import os
 import asyncio
 import re
 import openai
-from packaging import version
 
 # Попытка создать клиент через новый класс OpenAI
 try:
@@ -13,10 +14,6 @@ except ImportError:
     openai.api_key = os.getenv("OPENAI_API_KEY", "")
     _client = openai
 
-# Проверим, какой у клиента интерфейс
-_LIB_VER = version.parse(getattr(_client, "__version__", openai.__version__))
-_MODERN = _LIB_VER >= version.parse("1.0.0")
-
 
 async def get_embedding(text: str) -> list[float]:
     """
@@ -25,7 +22,7 @@ async def get_embedding(text: str) -> list[float]:
     loop = asyncio.get_event_loop()
 
     def _call():
-        if _MODERN and hasattr(_client, "embeddings"):
+        if hasattr(_client, "embeddings"):
             return _client.embeddings.create(model="text-embedding-3-large", input=text)
         else:
             return _client.Embedding.create(model="text-embedding-3-large", input=text)
@@ -45,7 +42,7 @@ async def transcribe_audio(file_path: str) -> str:
     loop = asyncio.get_event_loop()
 
     def _call():
-        if _MODERN and hasattr(_client, "audio"):
+        if hasattr(_client, "audio"):
             return _client.audio.transcriptions.create(model="whisper-1", file=open(file_path, "rb"))
         else:
             return _client.Audio.transcribe("whisper-1", open(file_path, "rb"))
@@ -69,9 +66,9 @@ async def generate_text(
     loop = asyncio.get_event_loop()
 
     def _call():
-        # Для web-search-preview моделей убираем лишние параметры
+        # Если модель для web-search-preview, убираем параметры temperature/top_p
         if "search-preview" in model:
-            if _MODERN and hasattr(_client, "chat"):
+            if hasattr(_client, "chat"):
                 return _client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}]
@@ -81,8 +78,8 @@ async def generate_text(
                     model=model,
                     messages=[{"role": "user", "content": prompt}]
                 )
-        # Для остальных моделей используем полные параметры
-        if _MODERN and hasattr(_client, "chat"):
+        # Иначе — полный набор параметров
+        if hasattr(_client, "chat"):
             return _client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
@@ -101,7 +98,7 @@ async def generate_text(
 
     try:
         resp = await loop.run_in_executor(None, _call)
-        if _MODERN:
+        if hasattr(_client, "chat"):
             return resp.choices[0].message.content.strip()
         else:
             return resp["choices"][0]["message"]["content"].strip()
@@ -120,7 +117,7 @@ async def generate_analysis_text(
     loop = asyncio.get_event_loop()
 
     def _call():
-        if _MODERN and hasattr(_client, "chat"):
+        if hasattr(_client, "chat"):
             return _client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
@@ -137,7 +134,7 @@ async def generate_analysis_text(
 
     try:
         resp = await loop.run_in_executor(None, _call)
-        if _MODERN:
+        if hasattr(_client, "chat"):
             return resp.choices[0].message.content.strip()
         else:
             return resp["choices"][0]["message"]["content"].strip()
