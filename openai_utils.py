@@ -1,89 +1,154 @@
-import openai
+import os
 import asyncio
+import re
+import openai
+from packaging import version
 
-from config import OPENAI_API_KEY
+# Попытка создать клиент через новый класс OpenAI
+try:
+    from openai import OpenAI
+    _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
+except ImportError:
+    # fallback на модуль openai
+    openai.api_key = os.getenv("OPENAI_API_KEY", "")
+    _client = openai
 
-# Инициализируем ключ
-openai.api_key = OPENAI_API_KEY
+# Проверим, какой у клиента интерфейс
+_LIB_VER = version.parse(getattr(_client, "__version__", openai.__version__))
+_MODERN = _LIB_VER >= version.parse("1.0.0")
+
 
 async def get_embedding(text: str) -> list[float]:
     """
-    Возвращает векторное представление текста с помощью text-embedding-3-large.
+    Универсальный эмбеддинг (text-embedding-3-large).
     """
     loop = asyncio.get_event_loop()
+
+    def _call():
+        if _MODERN and hasattr(_client, "embeddings"):
+            return _client.embeddings.create(model="text-embedding-3-large", input=text)
+        else:
+            return _client.Embedding.create(model="text-embedding-3-large", input=text)
+
     try:
-        resp = await loop.run_in_executor(
-            None,
-            lambda: openai.embeddings.create(
-                model="text-embedding-3-large",
-                input=text
-            )
-        )
-        # resp.data — список, в нулевом элементе .embedding
+        resp = await loop.run_in_executor(None, _call)
         return resp.data[0].embedding
     except Exception as e:
-        print(f"[OpenAI] Ошибка при получении эмбеддинга: {e}")
+        print(f"[OpenAI] get_embedding error: {e}")
         return []
+
 
 async def transcribe_audio(file_path: str) -> str:
     """
-    Транскрибирует аудио через Whisper.
+    Универсальная транскрипция через Whisper.
     """
     loop = asyncio.get_event_loop()
+
+    def _call():
+        if _MODERN and hasattr(_client, "audio"):
+            return _client.audio.transcriptions.create(model="whisper-1", file=open(file_path, "rb"))
+        else:
+            return _client.Audio.transcribe("whisper-1", open(file_path, "rb"))
+
     try:
-        with open(file_path, "rb") as f:
-            resp = await loop.run_in_executor(
-                None,
-                lambda: openai.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=f
-                )
-            )
-        return resp.text
+        resp = await loop.run_in_executor(None, _call)
+        return resp["text"]
     except Exception as e:
-        print(f"[OpenAI] Ошибка при расшифровке аудио: {e}")
+        print(f"[OpenAI] transcribe_audio error: {e}")
         return ""
 
-async def generate_text(prompt: str,
-                        model: str = "gpt-4o",
-                        max_tokens: int = 2000) -> str:
+
+async def generate_text(
+    prompt: str,
+    model: str = "gpt-4o",
+    max_tokens: int = 2000
+) -> str:
     """
-    Простая генерация текста через Chat Completions.
+    Универсальная генерация текста через ChatCompletion.
     """
     loop = asyncio.get_event_loop()
-    try:
-        resp = await loop.run_in_executor(
-            None,
-            lambda: openai.chat.completions.create(
+
+    def _call():
+        # Для web-search-preview моделей убираем лишние параметры
+        if "search-preview" in model:
+            if _MODERN and hasattr(_client, "chat"):
+                return _client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+            else:
+                return _client.ChatCompletion.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+        # Для остальных моделей используем полные параметры
+        if _MODERN and hasattr(_client, "chat"):
+            return _client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
                 temperature=0.7,
                 top_p=1.0
             )
-        )
-        return resp.choices[0].message.content.strip()
+        else:
+            return _client.ChatCompletion.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=0.7,
+                top_p=1.0
+            )
+
+    try:
+        resp = await loop.run_in_executor(None, _call)
+        if _MODERN:
+            return resp.choices[0].message.content.strip()
+        else:
+            return resp["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print(f"[OpenAI] Ошибка при генерации текста: {e}")
+        print(f"[OpenAI] generate_text error: {e}")
         return "Ошибка при генерации ответа."
 
-async def generate_analysis_text(prompt: str,
-                                 model: str = "gpt-4o") -> str:
+
+async def generate_analysis_text(
+    prompt: str,
+    model: str = "gpt-4o"
+) -> str:
     """
-    Генерация развёрнутого анализа (для daily_report).
+    Генерация развёрнутого анализа (например, для daily_report).
     """
     loop = asyncio.get_event_loop()
-    try:
-        resp = await loop.run_in_executor(
-            None,
-            lambda: openai.chat.completions.create(
+
+    def _call():
+        if _MODERN and hasattr(_client, "chat"):
+            return _client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2000,
                 temperature=0.7
             )
-        )
-        return resp.choices[0].message.content.strip()
+        else:
+            return _client.ChatCompletion.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                temperature=0.7
+            )
+
+    try:
+        resp = await loop.run_in_executor(None, _call)
+        if _MODERN:
+            return resp.choices[0].message.content.strip()
+        else:
+            return resp["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print(f"[OpenAI] Ошибка при генерации анализа: {e}")
+        print(f"[OpenAI] generate_analysis_text error: {e}")
         return ""
+
+
+def markdown_links_to_html(text: str) -> str:
+    """
+    [текст](url) -> <a href="url">текст</a>
+    """
+    pattern = r"\[([^\]]+)\]\(([^)]+)\)"
+    return re.sub(pattern, r'<a href="\2">\1</a>', text)

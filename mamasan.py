@@ -6,12 +6,12 @@ import logging
 import random
 import subprocess
 import requests
-import openai
 
 from aiogram import Bot, types
 from aiogram.enums import ChatAction
 from aiogram.types import FSInputFile
 from config import GROUP_IDS
+from openai_utils import generate_text
 
 logger = logging.getLogger(__name__)
 
@@ -116,16 +116,7 @@ QUESTIONS_POOL = [
     "Какие методы релаксации можно применять после напряжённого дня?",
     "Как бороться с чувством одиночества в большом мегаполисе?",
     "Какие места Шанхая рекомендуешь для неформального нетворкинга?",
-    "Как преодолеть языковой барьер при общении с клиентами из разных стран?",
-    "Какие привычки помогают сохранять позитив даже в сложных ситуациях?",
-    "Как внести изменения во внешний вид без радикальных перемен?",
-    "Какие книги или семинары по личностному росту ты можешь порекомендовать?",
-    "Как найти баланс между работой и личной жизнью в условиях динамичного графика?",
-    "Какие шаги помогут восстановить уверенность после неудачной встречи?",
-    "Как развивать навык самоанализа для постоянного профессионального роста?",
-    "Какие методы самомотивации наиболее эффективны при стрессовых периодах?"
 ]
-
 
 def detect_language_of_trigger(text: str) -> str:
     txt_lower = text.lower()
@@ -135,10 +126,9 @@ def detect_language_of_trigger(text: str) -> str:
         return "ru"
     return ""
 
-
 async def generate_gpt_reply(text: str, lang: str) -> str:
     """
-    Генерация ответа от «Мама сан».
+    Генерация ответа от «Мама сан» через generate_text.
     """
     system_prompt = (
         "Ты — Мама сан из эскорт-агентства YCF в Шанхае с 9-летним стажем. "
@@ -154,23 +144,18 @@ async def generate_gpt_reply(text: str, lang: str) -> str:
     else:
         system_prompt += " Отвечай на русском языке."
 
+    prompt = f"{system_prompt}\n\n{text}"
+
     try:
-        resp = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: openai.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user",   "content": text}
-                ],
-                temperature=0.7
-            )
+        reply = await generate_text(
+            prompt=prompt,
+            model="gpt-3.5-turbo",
+            max_tokens=1500
         )
-        return resp.choices[0].message.content.strip()
+        return reply.strip()
     except Exception as e:
         logger.error(f"GPT error: {e}")
         return "Извини, GPT недоступен."
-
 
 async def send_voice_reply(message: types.Message, text: str, lang: str):
     """

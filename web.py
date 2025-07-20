@@ -1,26 +1,14 @@
-import os
 import re
-import openai
 from aiogram import types
+from openai_utils import generate_text, markdown_links_to_html
 
-OPENAI_MODEL_WEBSEARCH = "gpt-4o-search-preview"  # или вашу модель
-openai.api_key = os.getenv("OPENAI_API_KEY", "")
-
-
-def markdown_links_to_html(text: str) -> str:
-    """
-    Ищем в тексте Markdown-ссылки: [текст](ссылка)
-    и конвертируем в <a href="ссылка">текст</a>.
-    """
-    pattern = r"\[([^\]]+)\]\(([^)]+)\)"
-    repl = r'<a href="\2">\1</a>'
-    return re.sub(pattern, repl, text)
-
+# Настройки для OpenAI Web Search Preview
+OPENAI_MODEL_WEBSEARCH = "gpt-4o-search-preview"  # или ваша модель
 
 def sanitize_minimal(text: str) -> str:
     """
     Минимальная «санитизация»:
-      - Заменим <, > и & на HTML-сущности,
+      - Заменяем <, > и & на HTML-сущности,
       - но НЕ трогаем теги <a ...>...</a>.
     """
     placeholders = {}
@@ -36,7 +24,6 @@ def sanitize_minimal(text: str) -> str:
         text = text.replace(ph, tag, 1)
 
     return text
-
 
 async def process_web_command(message: types.Message):
     """
@@ -56,21 +43,10 @@ async def process_web_command(message: types.Message):
     query = parts[1].strip()
 
     try:
-        # Пробуем старый интерфейс (0.28)
-        response = openai.ChatCompletion.create(
-            model=OPENAI_MODEL_WEBSEARCH,
-            messages=[{"role": "user", "content": query}],
-            temperature=0
+        raw_answer = await generate_text(
+            prompt=query,
+            model=OPENAI_MODEL_WEBSEARCH
         )
-        raw_answer = response["choices"][0]["message"]["content"]
-    except (AttributeError, openai.error.InvalidRequestError):
-        # Если не получилось — пробуем новый интерфейс (>=1.0.0)
-        response = openai.chat.completions.create(
-            model=OPENAI_MODEL_WEBSEARCH,
-            messages=[{"role": "user", "content": query}],
-            temperature=0
-        )
-        raw_answer = response.choices[0].message.content
     except Exception as e:
         await message.answer(f"Ошибка при запросе к веб-поиску: {e}")
         return
