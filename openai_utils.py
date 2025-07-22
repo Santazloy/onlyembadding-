@@ -1,8 +1,7 @@
-# openai_utils.py
-
 import os
 import asyncio
 import re
+import logging
 import openai
 
 # Попытка создать клиент через новый класс OpenAI
@@ -37,21 +36,31 @@ async def get_embedding(text: str) -> list[float]:
 
 async def transcribe_audio(file_path: str) -> str:
     """
-    Универсальная транскрипция через Whisper.
+    Транскрибирует голосовое. Сначала пробует gpt-4o-transcribe,
+    при ошибке откатывается на whisper-1.
     """
     loop = asyncio.get_event_loop()
 
-    def _call():
-        if hasattr(_client, "audio"):
-            return _client.audio.transcriptions.create(model="whisper-1", file=open(file_path, "rb"))
-        else:
-            return _client.Audio.transcribe("whisper-1", open(file_path, "rb"))
+    def _transcribe(model: str):
+        if hasattr(_client, "audio"):          # новый SDK
+            return _client.audio.transcriptions.create(
+                model=model,
+                file=open(file_path, "rb"),
+            )
+        # старый SDK
+        return _client.Audio.transcribe(model, open(file_path, "rb"))
 
     try:
-        resp = await loop.run_in_executor(None, _call)
-        return resp["text"]
+        try:
+            resp = await loop.run_in_executor(None, _transcribe, "gpt-4o-transcribe")
+        except Exception as primary_err:
+            logging.warning("gpt-4o-transcribe failed → fallback: %s", primary_err)
+            resp = await loop.run_in_executor(None, _transcribe, "whisper-1")
+
+        # унификация доступа к тексту
+        return resp.text if hasattr(resp, "text") else resp.get("text", "")
     except Exception as e:
-        print(f"[OpenAI] transcribe_audio error: {e}")
+        logging.error("[OpenAI] transcribe_audio error: %s", e)
         return ""
 
 

@@ -56,6 +56,7 @@ async def ex_command_handler(message: types.Message):
     result_text = convert_and_format(amount, base_currency)
     await message.answer(result_text, parse_mode="HTML")
 
+
 @router.message(Command("taro"))
 async def cmd_taro(message: types.Message):
     try:
@@ -70,10 +71,8 @@ async def cmd_taro(message: types.Message):
         caption = f"{pos_text}: {card_name}{orientation}"
         full_path = os.path.join(TARO_FOLDER, fname)
 
-        # Асинхронно ждём интерпретацию
         interpretation = await get_card_interpretation(card_name, pos_text, is_rev)
 
-        # Отправляем фото (без изменений)
         try:
             photo = FSInputFile(full_path)
             await message.answer_photo(photo=photo, caption=caption)
@@ -85,9 +84,9 @@ async def cmd_taro(message: types.Message):
             )
             continue
 
-        # Отправляем интерпретацию
         await message.answer(f"<pre>{html.escape(interpretation)}</pre>",
                              parse_mode="HTML")
+
 
 @router.message(Command("web"))
 async def cmd_web(message: types.Message):
@@ -143,7 +142,9 @@ async def handle_voice_message(message: types.Message):
     await bot.download_file(file_info.file_path, local_filename)
 
     transcribed_text = await transcribe_audio(local_filename)
+
     if not transcribed_text:
+        os.remove(local_filename)
         return await message.answer("Не удалось распознать голосовое сообщение :(")
 
     user_name = message.from_user.full_name if message.from_user else "unknown"
@@ -155,11 +156,20 @@ async def handle_voice_message(message: types.Message):
     )
 
     emb = await get_embedding(transcribed_text)
+    await message.answer(f"{user_name}:\n{transcribed_text}")
+
+    # удаляем исходное voice сообщение
+    try:
+        await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+    except Exception as err:
+        logger.warning("Не удалось удалить voice %s: %s", message.message_id, err)
+
     if emb:
         await save_embedding(message.chat.id, message.from_user.id, emb)
-        await message.answer(f"Распознанный текст:\n{transcribed_text}")
     else:
         await message.answer("Ошибка при получении эмбеддинга.")
+
+    os.remove(local_filename)
 
 
 @router.message()
