@@ -1,13 +1,22 @@
+# handlers.py
+
 import os
 import html
 import logging
+import asyncio
+from datetime import datetime, timedelta
+from typing import Optional, Dict, List
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import FSInputFile
 
 from config import GROUP_IDS
-from db import save_embedding, count_embeddings, save_message
-from openai_utils import get_embedding, transcribe_audio
+from db import (
+    save_embedding, count_embeddings, save_message,
+    find_similar_messages, get_user_statistics,
+    update_user_metrics, get_user_metrics_history
+)
+from openai_utils import get_embedding, transcribe_audio, analyze_sentiment
 from daily_report import send_daily_report
 from exchange import convert_and_format
 from web import process_web_command
@@ -26,6 +35,9 @@ from taro_module import (
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Кэш для временного хранения данных о сообщениях
+message_cache: Dict[int, Dict] = {}
+
 
 @router.message(Command("test"))
 async def cmd_test(message: types.Message):
@@ -37,6 +49,84 @@ async def cmd_test(message: types.Message):
 async def cmd_report(message: types.Message):
     await send_daily_report(message.bot, message.chat.id)
     await message.answer("Отчёт сформирован для этого чата!")
+
+
+@router.message(Command("stats"))
+async def cmd_user_stats(message: types.Message):
+    """Команда для просмотра личной статистики"""
+    user_id = message.from_user.id
+    group_id = message.chat.id
+
+    # Получаем статистику за последние 7 дней
+    end_time = datetime.utcnow()
+    start_time = end_time - timedelta(days=7)
+
+    user_stats = await get_user_statistics(group_id, start_time, end_time)
+    user_data = user_stats.get(user_id, {})
+
+    if not user_data:
+        await message.answer("У вас пока нет статистики в этом чате.")
+        return
+
+    # Получаем историю метрик
+    metrics_history = await get_user_metrics_history(group_id, user_id, days=7)
+
+    stats_text = f"""
+📊 <b>Ваша статистика за последние 7 дней:</b>
+
+👤 <b>Пользователь:</b> {user_data.get('user_name', 'Unknown')}
+💬 <b>Сообщений:</b> {user_data.get('message_count', 0)}
+📝 <b>Средняя длина:</b> {user_data.get('avg_message_length', 0):.0f} символов
+🕐 <b>Активных часов:</b> {user_data.get('active_hours', 0)}
+🧠 <b>Эмбеддингов:</b> {user_data.get('embedding_count', 0)}
+
+<b>Динамика по дням:</b>
+"""
+
+    for metric in metrics_history[:7]:
+        date_str = metric['metric_date'].strftime('%d.%m')
+        msg_count = metric.get('message_count', 0)
+        influence = metric.get('influence_score', 0)
+        stats_text += f"📅 {date_str}: {msg_count} сообщ., влияние: {influence:.2f}\n"
+
+    await message.answer(stats_text, parse_mode="HTML")
+
+
+@router.message(Command("similar"))
+async def cmd_find_similar(message: types.Message):
+    """Поиск похожих сообщений"""
+    # Получаем текст после команды
+    text = message.text.replace('/similar', '').strip()
+
+    if not text:
+        await message.answer("Использование: /similar <текст для поиска>")
+        return
+
+    # Получаем эмбеддинг для поиска
+    search_embedding = await get_embedding(text)
+    if not search_embedding:
+        await message.answer("Ошибка при создании эмбеддинга для поиска.")
+        return
+
+    # Ищем похожие сообщения
+    similar_messages = await find_similar_messages(
+        message.chat.id,
+        search_embedding,
+        threshold=0.7,
+        limit=5
+    )
+
+    if not similar_messages:
+        await message.answer("Похожих сообщений не найдено.")
+        return
+
+    response = "🔍 <b>Похожие сообщения:</b>\n\n"
+    for i, msg in enumerate(similar_messages, 1):
+        response += f"{i}. <b>{msg['user_name']}</b> ({msg['created_at'].strftime('%d.%m %H:%M')})\n"
+        response += f"   📊 Схожесть: {msg['similarity']:.1%}\n"
+        response += f"   💬 {html.escape(msg['text'][:100])}{'...' if len(msg['text']) > 100 else ''}\n\n"
+
+    await message.answer(response, parse_mode="HTML")
 
 
 @router.message(Command("ex"))
@@ -93,6 +183,42 @@ async def cmd_web(message: types.Message):
     await process_web_command(message)
 
 
+async def process_message_embedding(message: types.Message, text: str,
+                                    message_id: Optional[int] = None):
+    """Обработка и сохранение эмбеддинга сообщения"""
+    # Получаем эмбеддинг
+    emb = await get_embedding(text)
+    if not emb:
+        logger.error(f"Ошибка получения эмбеддинга для текста: {text[:50]}...")
+        return None
+
+    # Сохраняем эмбеддинг
+    await save_embedding(
+        group_id=message.chat.id,
+        user_id=message.from_user.id,
+        embedding_vector=emb,
+        message_id=message_id
+    )
+
+    # Анализируем sentiment если это текстовое сообщение
+    if len(text) > 10:
+        sentiment = await analyze_sentiment(text)
+
+        # Обновляем метрики пользователя
+        await update_user_metrics(
+            group_id=message.chat.id,
+            user_id=message.from_user.id,
+            metric_date=datetime.utcnow(),
+            metrics={
+                'sentiment_score': sentiment,
+                'message_count': 1  # Будет инкрементироваться в БД
+            }
+        )
+
+    logger.info(f"Эмбеддинг для сообщения {message_id} успешно сохранён")
+    return emb
+
+
 @router.message(F.text)
 async def handle_text_message(message: types.Message):
     if message.chat.id not in GROUP_IDS:
@@ -103,20 +229,34 @@ async def handle_text_message(message: types.Message):
         return
 
     user_name = message.from_user.full_name if message.from_user else "unknown"
-    await save_message(
+
+    # Определяем, является ли это ответом
+    reply_to_id = None
+    if message.reply_to_message:
+        reply_to_id = message_cache.get(message.reply_to_message.message_id, {}).get('db_id')
+
+    # Сохраняем сообщение
+    message_db_id = await save_message(
         group_id=message.chat.id,
         user_id=message.from_user.id,
         user_name=user_name,
-        text=text
+        text=text,
+        reply_to_message_id=reply_to_id
     )
 
-    emb = await get_embedding(text)
-    if emb:
-        await save_embedding(message.chat.id, message.from_user.id, emb)
-        logger.info(f"Эмбеддинг (text) для '{text}' успешно сохранён.")
-    else:
-        logger.error(f"Ошибка эмбеддинга (text) для '{text}'")
+    # Кэшируем ID для последующих ответов
+    message_cache[message.message_id] = {
+        'db_id': message_db_id,
+        'timestamp': datetime.utcnow()
+    }
 
+    # Очищаем старый кэш (старше 1 часа)
+    await cleanup_message_cache()
+
+    # Обрабатываем эмбеддинг
+    await process_message_embedding(message, text, message_db_id)
+
+    # Проверяем триггеры для ответа
     lang = detect_language_of_trigger(text)
     text_lower = text.lower()
 
@@ -148,28 +288,43 @@ async def handle_voice_message(message: types.Message):
         return await message.answer("Не удалось распознать голосовое сообщение :(")
 
     user_name = message.from_user.full_name if message.from_user else "unknown"
-    await save_message(
-        message.chat.id,
-        message.from_user.id,
-        user_name,
-        transcribed_text
+
+    # Сохраняем транскрибированное сообщение
+    message_db_id = await save_message(
+        group_id=message.chat.id,
+        user_id=message.from_user.id,
+        user_name=user_name,
+        text=transcribed_text,
+        message_type="voice"
     )
 
-    emb = await get_embedding(transcribed_text)
-    await message.answer(f"{user_name}:\n{transcribed_text}")
+    # Отправляем транскрипцию
+    await message.answer(f"🎤 {user_name}:\n{transcribed_text}")
 
-    # удаляем исходное voice сообщение
+    # Удаляем исходное voice сообщение
     try:
         await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
     except Exception as err:
         logger.warning("Не удалось удалить voice %s: %s", message.message_id, err)
 
-    if emb:
-        await save_embedding(message.chat.id, message.from_user.id, emb)
-    else:
-        await message.answer("Ошибка при получении эмбеддинга.")
+    # Обрабатываем эмбеддинг
+    await process_message_embedding(message, transcribed_text, message_db_id)
 
     os.remove(local_filename)
+
+
+async def cleanup_message_cache():
+    """Очистка устаревших записей в кэше"""
+    current_time = datetime.utcnow()
+    cutoff_time = current_time - timedelta(hours=1)
+
+    to_remove = []
+    for msg_id, data in message_cache.items():
+        if data['timestamp'] < cutoff_time:
+            to_remove.append(msg_id)
+
+    for msg_id in to_remove:
+        del message_cache[msg_id]
 
 
 @router.message()
