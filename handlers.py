@@ -17,7 +17,7 @@ from db import (
     update_user_metrics, get_user_metrics_history
 )
 from openai_utils import get_embedding, transcribe_audio, analyze_sentiment
-from daily_report import send_daily_report
+from daily_report import send_daily_report, send_period_report
 from exchange import convert_and_format
 from web import process_web_command
 from mamasan import (
@@ -47,8 +47,33 @@ async def cmd_test(message: types.Message):
 
 @router.message(Command("report"))
 async def cmd_report(message: types.Message):
+    """Ежедневный отчет за последние 24 часа"""
     await send_daily_report(message.bot, message.chat.id)
-    await message.answer("Отчёт сформирован для этого чата!")
+    await message.answer("📊 Отчёт за последние 24 часа сформирован!")
+
+
+@router.message(Command("three"))
+async def cmd_three_days_report(message: types.Message):
+    """Отчет за последние 72 часа"""
+    await message.answer("⏳ Формирую отчёт за последние 72 часа...")
+    await send_period_report(message.bot, message.chat.id, days=3)
+    await message.answer("📊 Отчёт за последние 72 часа отправлен!")
+
+
+@router.message(Command("week"))
+async def cmd_week_report(message: types.Message):
+    """Отчет за последние 7 дней"""
+    await message.answer("⏳ Формирую отчёт за последнюю неделю...")
+    await send_period_report(message.bot, message.chat.id, days=7)
+    await message.answer("📊 Недельный отчёт отправлен!")
+
+
+@router.message(Command("month"))
+async def cmd_month_report(message: types.Message):
+    """Отчет за последние 30 дней"""
+    await message.answer("⏳ Формирую отчёт за последний месяц (это может занять время)...")
+    await send_period_report(message.bot, message.chat.id, days=30)
+    await message.answer("📊 Месячный отчёт отправлен!")
 
 
 @router.message(Command("stats"))
