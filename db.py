@@ -127,15 +127,12 @@ async def save_embedding(group_id: int, user_id: int,
 
     conn = await pool.acquire()
     try:
+        # Просто вставляем новую запись без ON CONFLICT
         await conn.execute(
             """
             INSERT INTO embeddings 
                 (group_id, user_id, message_id, embedding_vector, magnitude)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (group_id, user_id, created_at) 
-            DO UPDATE SET 
-                embedding_vector = EXCLUDED.embedding_vector,
-                magnitude = EXCLUDED.magnitude
         """, group_id, user_id, message_id, embedding_vector, magnitude)
     finally:
         await pool.release(conn)
