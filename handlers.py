@@ -25,7 +25,10 @@ from mamasan import (
     TEXT_TRIGGERS_EN, TEXT_TRIGGERS_RU,
     detect_language_of_trigger,
     generate_gpt_reply, send_voice_reply,
-    send_random_questions
+    send_random_questions,
+    mama_san,  # Глобальный экземпляр класса MamaSan
+    send_interactive_menu,  # Функция интерактивного меню
+    detect_character_mention  # Детектор упоминаний персонажей
 )
 from taro_module import (
     manara_cards, TARO_FOLDER, draw_cards,
@@ -74,6 +77,12 @@ async def cmd_month_report(message: types.Message):
     await message.answer("⏳ Формирую отчёт за последний месяц (это может занять время)...")
     await send_period_report(message.bot, message.chat.id, days=30)
     await message.answer("📊 Месячный отчёт отправлен!")
+
+
+@router.message(Command("mama"))
+async def cmd_mama_menu(message: types.Message):
+    """Команда для вызова интерактивного меню Мама сан"""
+    await send_interactive_menu(message)
 
 
 @router.message(Command("stats"))
@@ -285,13 +294,35 @@ async def handle_text_message(message: types.Message):
     lang = detect_language_of_trigger(text)
     text_lower = text.lower()
 
+    # Проверяем упоминание персонажей команды
+    character_mention = detect_character_mention(text)
+    if character_mention and lang:
+        # Если упомянут персонаж, рассказываем историю о нём
+        story = mama_san.get_character_story(character_mention)
+        await message.answer(story)
+        return
+
+    # Обработка голосовых триггеров
     if any(t in text_lower for t in VOICE_TRIGGERS_EN + VOICE_TRIGGERS_RU):
-        reply = await generate_gpt_reply(text_lower, lang)
+        # Используем новый контекстный генератор ответов
+        reply = await mama_san.generate_contextual_reply(
+            text,
+            message.from_user.id,
+            user_name,
+            lang
+        )
         await send_voice_reply(message, reply, lang)
         return
 
+    # Обработка текстовых триггеров
     if any(t in text_lower for t in TEXT_TRIGGERS_EN + TEXT_TRIGGERS_RU):
-        reply = await generate_gpt_reply(text_lower, lang)
+        # Используем новый контекстный генератор ответов
+        reply = await mama_san.generate_contextual_reply(
+            text,
+            message.from_user.id,
+            user_name,
+            lang
+        )
         await message.answer(reply)
         return
 
@@ -334,6 +365,27 @@ async def handle_voice_message(message: types.Message):
 
     # Обрабатываем эмбеддинг
     await process_message_embedding(message, transcribed_text, message_db_id)
+
+    # Проверяем триггеры в транскрибированном тексте
+    lang = detect_language_of_trigger(transcribed_text)
+    text_lower = transcribed_text.lower()
+
+    # Проверяем упоминание персонажей
+    character_mention = detect_character_mention(transcribed_text)
+    if character_mention and lang:
+        story = mama_san.get_character_story(character_mention)
+        await message.answer(story)
+        return
+
+    # Если в голосовом сообщении есть триггеры, отвечаем
+    if any(t in text_lower for t in VOICE_TRIGGERS_EN + VOICE_TRIGGERS_RU + TEXT_TRIGGERS_EN + TEXT_TRIGGERS_RU):
+        reply = await mama_san.generate_contextual_reply(
+            transcribed_text,
+            message.from_user.id,
+            user_name,
+            lang if lang else "ru"  # По умолчанию русский
+        )
+        await send_voice_reply(message, reply, lang if lang else "ru")
 
     os.remove(local_filename)
 
