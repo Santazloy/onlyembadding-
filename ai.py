@@ -16,3 +16,4 @@ def list_available_models(api_key: str):
 
 if __name__ == "__main__":
     list_available_models(API_KEY)
+g
